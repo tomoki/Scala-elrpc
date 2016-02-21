@@ -12,7 +12,10 @@ case class SAList  (value: Map[SExp, SExp]) extends SExp
 
 object SExpFunctions {
   object SExpImplicits {
+    import scala.language.implicitConversions
     implicit def sSymbolToSymbol(s: SSymbol) : Symbol =
+      s.value
+    implicit def sStringToString(s: SString) : String =
       s.value
     implicit def sIntegerToLong(s: SInteger) : Long =
       s.value
@@ -25,6 +28,8 @@ object SExpFunctions {
 
     implicit def symbolToSSymbol(s: Symbol) : SSymbol =
       SSymbol(s)
+    implicit def sStringToString(s: String) : SString =
+      SString(s)
     implicit def longToSInteger(s: Long) : SInteger =
       SInteger(s)
     implicit def doubleToSFloat(s: Double) : SFloat =
@@ -38,8 +43,8 @@ object SExpFunctions {
     s match {
       case SSymbol(v)        => v.name
       case SString(v)        => "\"%s\"".format(v)
-      case SInteger(v) => v.toString
-      case SFloat(v)   => v.toString
+      case SInteger(v)       => v.toString
+      case SFloat(v)         => v.toString
       case SList(v)          => "(" + v.map(toString(_)).mkString(" ") + ")"
       case SAList(v)         => "(" + v.map(p => "(%s . %s)".format(toString(p._1),
                                                                     toString(p._2))).mkString(" ") + ")"
@@ -56,11 +61,11 @@ object SExpFunctions {
   }
   object SExpParser extends JavaTokenParsers {
     def ssymbol  = regex("""[A-Za-z+-/\*]+""".r)  ^^ (s => SSymbol(Symbol(s)))
-    def sstring  = stringLiteral                  ^^ (s => SString(s))
+    def sstring  = stringLiteral                  ^^ (s => SString(s.slice(1, s.length-1)))
     def sdouble  = floatingPointNumber            ^^ (d => try {
                                                         SInteger(d.toLong)
                                                       } catch {
-                                                        case _ => SFloat(d.toDouble)
+                                                        case _: NumberFormatException => SFloat(d.toDouble)
                                                       })
     def slist    = "(" ~> rep(all) <~ ")"         ^^ (l => SList(l))
     def salist   = "(" ~> rep(conspair) <~ ")"    ^^ (l => SAList(l.foldLeft(Map.empty[SExp, SExp])

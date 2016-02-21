@@ -5,6 +5,9 @@ class SExp extends FlatSpec with Matchers {
   "toString('a)" should " -> a" in {
     SExpFunctions.toString(SSymbol('a)) should be ("a")
   }
+  """toString("a")""" should """ -> "a"""" in {
+    SExpFunctions.toString(SString("a")) should be ("\"a\"")
+  }
   "toString(1)" should " -> 1" in {
     SExpFunctions.toString(SInteger(1)) should be ("1")
   }
@@ -23,6 +26,9 @@ class SExp extends FlatSpec with Matchers {
 
   "fromString(a)" should " -> 'a" in {
     SExpFunctions.fromString("a").get should be (SSymbol('a))
+  }
+  """fromString("a")""" should """ -> "a"""" in {
+    SExpFunctions.fromString("\"a\"").get should be (SString("a"))
   }
   "fromString(1)" should " -> 1" in {
     SExpFunctions.fromString("1").get should be (SInteger(1))
