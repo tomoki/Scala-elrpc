@@ -8,12 +8,14 @@ import java.net.InetSocketAddress
 import scala.concurrent._
 import ExecutionContext.Implicits.global
 
-class Server(port: Int, handler: HandlerTrait) extends Actor {
-  import Tcp._
-  import context.system
+import Tcp._
 
-  IO(Tcp) ! Bind(self, new InetSocketAddress("localhost", port))
-  def printPort() : Unit = Console.out.println(port)
+object ServerHander {
+  def props(conn: ActorRef, handler: HandlerTrait) : Props =
+    Props(new ServerHandler(conn,handler))
+}
+
+class ServerHandler(conn: ActorRef, handler: HandlerTrait) extends Actor {
   def parseMessages(data: String) : List[net.pushl.elrpc.Message] = {
     if(data.length == 0)
       Nil
@@ -35,40 +37,45 @@ class Server(port: Int, handler: HandlerTrait) extends Actor {
     ByteString(s, "utf-8")
   }
   def receive = {
+    case CommandFailed(w: Write) =>
+      Console.err.println("write failed")
+    case Received(data) => {
+      val messages = parseMessages(data.decodeString("utf-8"))
+      Console.err.println(messages)
+      val rets     = messages.flatMap(handler.handleMessage(_))
+      rets.foreach(_.onSuccess {
+                     case m => {
+                       val tosend = encodeString(MessageFunctions.toString(m))
+                       Console.err.println(tosend.decodeString("utf-8"))
+                       conn ! Write(tosend)
+                     }
+                   })
+    }
+    case "close" =>
+      conn ! Close
+    case _: ConnectionClosed =>
+      Console.err.println("connection closed")
+      context stop self
+  }
+}
+
+class Server(port: Int, handler: HandlerTrait) extends Actor {
+  import context.system
+  IO(Tcp) ! Bind(self, new InetSocketAddress("localhost", port))
+  def printPort() : Unit = Console.out.println(port)
+
+
+  def receive = {
     case Bound(localaddress) => {
       Console.err.println(localaddress)
+      Console.out.println(localaddress.getPort)
     }
     case CommandFailed(_: Bind) => {
       Console.err.println("failed")
     }
     case Connected(remote, local) => {
       Console.err.println("connect")
-      val connection = sender()
-      connection ! Register(self)
-      context become {
-        // case data: ByteString =>
-        //   connection ! Write(data)
-        case CommandFailed(w: Write) =>
-          Console.err.println("write failed")
-        case Received(data) => {
-          val messages = parseMessages(data.decodeString("utf-8"))
-          Console.err.println(messages)
-          val rets     = messages.flatMap(handler.handleMessage(_))
-          rets.foreach(_.onSuccess {
-                         case m => {
-
-                           val tosend = encodeString(MessageFunctions.toString(m))
-                           Console.err.println(tosend.decodeString("utf-8"))
-                           connection ! Write(tosend)
-                         }
-                       })
-        }
-        case "close" =>
-          connection ! Close
-        case _: ConnectionClosed =>
-          Console.err.println("connection closed")
-          context stop self
-      }
+      sender() ! Register(context.actorOf(ServerHander.props(sender(), handler)))
     }
   }
 }
